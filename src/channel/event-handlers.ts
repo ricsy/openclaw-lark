@@ -9,6 +9,7 @@
  * dependencies needed to process the event.
  */
 
+import { LARK_ERROR } from '../core/auth-errors';
 import type {
   FeishuBotAddedEvent,
   FeishuMessageEvent,
@@ -269,20 +270,20 @@ export async function handleRecallEvent(ctx: MonitorContext, data: unknown): Pro
   const { accountId, log, error } = ctx;
   try {
     const event = data as FeishuRecallCreatedEvent;
-    const messageId = event.message_id ?? 'unknown';
-    const chatId = event.chat_id ?? 'unknown';
+    const msgId = event.message_id ?? 'unknown';
+    const chatId = event.chat_id ?? '';
     const recallType = event.recall_type ?? 'unknown';
-    log(`feishu[${accountId}]: message ${messageId} recalled, type=${recallType}`);
     const botOpenId = ctx.lark.botOpenId;
 
-    // Mark the recalled message as unavailable so that any subsequent API calls
-    // targeting it are silently skipped.
-    markMessageUnavailable({ messageId, apiCode: 230011, operation: 'recall' });
+    log(`feishu[${accountId}]: message ${msgId} recalled, type=${recallType}`);
 
-    // Send "/stop" notification via handleMessageEvent (bypasses the queue).
+    // Mark the recalled message as unavailable so that any subsequent API calls
+    markMessageUnavailable({ messageId: msgId, apiCode: LARK_ERROR.MESSAGE_RECALLED, operation: 'recall' });
+
+    // Send "/stop" notification via handleMessageEvent
     const notifyEvent: FeishuMessageEvent = {
       message: {
-        message_id: messageId,
+        message_id: msgId,
         chat_id: chatId,
         message_type: 'text',
         create_time: String(Date.now()),
