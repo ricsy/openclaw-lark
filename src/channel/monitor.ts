@@ -22,6 +22,7 @@ import {
   handleCardActionEvent,
   handleMessageEvent,
   handleReactionEvent,
+  handleRecallEvent,
 } from './event-handlers';
 
 const mlog = larkLogger('channel/monitor');
@@ -100,6 +101,7 @@ async function monitorSingleAccount(params: {
       // These events are expected in normal usage but do not affect the
       // plugin's current behavior. Register no-op handlers to avoid SDK
       // warnings about missing handlers.
+      'im.message.recalled_v1': (data) => handleRecallEvent(ctx, data),
       'im.message.reaction.deleted_v1': async () => {},
       'im.chat.access_event.bot_p2p_chat_entered_v1': async () => {},
       'im.chat.member.bot.added_v1': (data) => handleBotMembershipEvent(ctx, data, 'added'),

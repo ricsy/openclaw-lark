@@ -9,7 +9,12 @@
  * dependencies needed to process the event.
  */
 
-import type { FeishuBotAddedEvent, FeishuMessageEvent, FeishuReactionCreatedEvent } from '../messaging/types';
+import type {
+  FeishuBotAddedEvent,
+  FeishuMessageEvent,
+  FeishuReactionCreatedEvent,
+  FeishuRecallCreatedEvent,
+} from '../messaging/types';
 import { handleFeishuMessage } from '../messaging/inbound/handler';
 import { handleFeishuReaction, resolveReactionContext } from '../messaging/inbound/reaction-handler';
 import { isMessageExpired } from '../messaging/inbound/dedup';
@@ -252,5 +257,40 @@ export async function handleCardActionEvent(ctx: MonitorContext, data: unknown):
     return await handleCardAction(data, ctx.cfg, ctx.accountId);
   } catch (err) {
     elog.warn(`card.action.trigger handler error: ${err}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message recall handler
+// ---------------------------------------------------------------------------
+export async function handleRecallEvent(ctx: MonitorContext, data: unknown): Promise<void> {
+  if (!isEventOwnershipValid(ctx, data)) return;
+  const { accountId, log, error, lark } = ctx;
+  try {
+    const event = data as FeishuRecallCreatedEvent;
+    const messageId = event.message_id ?? 'unknown';
+    const chatId = event.chat_id ?? 'unknown';
+    const recallType = event.recall_type ?? 'unknown';
+    log(`feishu[${accountId}]: message ${messageId} recalled, type=${recallType}`);
+
+    // 发送通知消息
+    try {
+      await lark.sdk.im.message.create({
+        params: {
+          receive_id_type: 'chat_id',
+        },
+        data: {
+          receive_id: chatId,
+          msg_type: 'text',
+          content: JSON.stringify({
+            text: `您撤回了一条消息`,
+          }),
+        },
+      });
+    } catch (sendErr) {
+      error(`feishu[${accountId}]: failed to send recall notification: ${String(sendErr)}`);
+    }
+  } catch (err) {
+    error(`feishu[${accountId}]: error handling recall event: ${String(err)}`);
   }
 }

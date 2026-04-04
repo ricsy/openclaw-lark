@@ -61,6 +61,13 @@ export interface FeishuReactionCreatedEvent {
   action_time?: string;
 }
 
+export interface FeishuRecallCreatedEvent {
+  message_id: string;
+  chat_id: string;
+  recall_type: 'message_owner' | 'group_owner' | 'group_manager' | 'enterprise_manager';
+  recall_time: string;
+}
+
 export interface FeishuBotAddedEvent {
   chat_id: string;
   operator_id: {
