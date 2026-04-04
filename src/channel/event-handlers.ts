@@ -20,6 +20,7 @@ import { handleFeishuReaction, resolveReactionContext } from '../messaging/inbou
 import { isMessageExpired } from '../messaging/inbound/dedup';
 import { withTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
+import { markMessageUnavailable } from '../core/message-unavailable';
 import { handleCardAction } from '../tools/auto-auth';
 import { handleAskUserAction } from '../tools/ask-user-question';
 import { buildQueueKey, enqueueFeishuChatTask, getActiveDispatcher, hasActiveTask } from './chat-queue';
@@ -265,31 +266,35 @@ export async function handleCardActionEvent(ctx: MonitorContext, data: unknown):
 // ---------------------------------------------------------------------------
 export async function handleRecallEvent(ctx: MonitorContext, data: unknown): Promise<void> {
   if (!isEventOwnershipValid(ctx, data)) return;
-  const { accountId, log, error, lark } = ctx;
+  const { accountId, log, error } = ctx;
   try {
     const event = data as FeishuRecallCreatedEvent;
     const messageId = event.message_id ?? 'unknown';
     const chatId = event.chat_id ?? 'unknown';
     const recallType = event.recall_type ?? 'unknown';
     log(`feishu[${accountId}]: message ${messageId} recalled, type=${recallType}`);
+    const botOpenId = ctx.lark.botOpenId;
 
-    // 发送通知消息
-    try {
-      await lark.sdk.im.message.create({
-        params: {
-          receive_id_type: 'chat_id',
-        },
-        data: {
-          receive_id: chatId,
-          msg_type: 'text',
-          content: JSON.stringify({
-            text: `您撤回了一条消息`,
-          }),
-        },
-      });
-    } catch (sendErr) {
-      error(`feishu[${accountId}]: failed to send recall notification: ${String(sendErr)}`);
-    }
+    // Mark the recalled message as unavailable so that any subsequent API calls
+    // targeting it are silently skipped.
+    markMessageUnavailable({ messageId, apiCode: 230011, operation: 'recall' });
+
+    // Send "/stop" notification via handleMessageEvent (bypasses the queue).
+    const notifyEvent: FeishuMessageEvent = {
+      message: {
+        message_id: messageId,
+        chat_id: chatId,
+        message_type: 'text',
+        create_time: String(Date.now()),
+        content: JSON.stringify({ text: '/stop' }),
+        chat_type: 'p2p',
+      },
+      sender: {
+        sender_type: 'user',
+        sender_id: { open_id: botOpenId },
+      },
+    };
+    await handleMessageEvent(ctx, notifyEvent);
   } catch (err) {
     error(`feishu[${accountId}]: error handling recall event: ${String(err)}`);
   }
